@@ -72,7 +72,7 @@ nmap -sC -sV -p- -min-rate 5000 -T4 10.146.188.183
 Observation: Port 22/tcp (OpenSSH 8.2p1) and 1337/tcp (Apache httpd 2.4.41, title 'Login') are open. The PHPSESSID cookie is set without the HttpOnly flag.
 Outcome: Attack surface identified: a single web application on port 1337 plus SSH.
 
-https://images/nmap_scan.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_19_46.png
 
 Step 2: Source Code Review of the Login Page
 Action: Viewed the raw HTML of the login page to find hidden hints.
@@ -82,7 +82,7 @@ view-source:http://10.146.188.183:1337/index.php
 Observation: The form posts to index.php with fields email and password. A developer comment revealed: Directory naming convention must be hrmr_DIRECTORY_NAME. It also links to reset_password.php.
 Outcome: The developer comment revealed a naming pattern (hmr_*) used later to find log directories.
 
-https://images/login_source.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_00_42.png
 
 Step 3: Directory and File Enumeration
 Action: Brute-forced web paths to discover hidden resources.
@@ -92,7 +92,7 @@ feroxbuster -u http://10.146.188.183:1337/ -w /usr/share/seclists/Discovery/Web-
 Observation: Discovered reset_password.php (200), hmr_css/bootstrap.min.css, phpmyadmin/, vendor/ (including composer/installed.json and the firebase/php-jwt library), and javascript/. Hitting the guessed hmr_logs directory exposed an error log.
 Outcome: Multiple exposed paths were identified, including the vendor directory revealing a JWT library.
 
-https://images/feroxbuster.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_55_04.png
 
 Step 4: Information Disclosure through Error Logs
 Action: Opened the discovered log directory and the error log file.
@@ -103,7 +103,7 @@ http://10.146.188.183:1337/hmr_logs/error.logs
 Observation: Directory listing is enabled. The log contains authentication failures for user tester@hammer.thm, attempts against /restricted-area and /admin-login, attempts to read /etc/shadow, and internal server paths like /var/www/html/ and /home/hammerthm/test.php.
 Outcome: Confirmed a valid account (tester@hammer.thm), internal file paths and a naming pattern.
 
-https://images/error_logs.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_31_25.png
 
 Step 5: Testing the Password Reset Flow
 Action: Submitted the account email to the reset form.
@@ -114,7 +114,7 @@ POST reset_password.php recovery_code=2378&s=140
 Observation: The first attempt returned 'Time elapsed. Please try again later.' A later attempt returned 'Rate limit exceeded.' The recovery screen asks for a 4-digit code and shows a countdown timer (~180 seconds).
 Outcome: The reset flow uses a short-lived 4-digit code, a visible timer, and a rate limit.
 
-https://images/reset_page.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_55_34.png
 
 Step 6: Rate-Limit Bypass using X-Forwarded-For
 Action: Confirmed that the rate limiter trusts a client-supplied header.
@@ -124,7 +124,7 @@ Burp Repeater: add header 'X-Forwarded-For: 1.1.1.1' to the reset request
 Observation: After the rate-limit message appeared, adding the X-Forwarded-For header with a new value allowed the request to proceed again. The server counts requests per client-supplied IP rather than per real connection.
 Outcome: Rate-limit bypass confirmed.
 
-https://images/xff_bypass.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_58_18.png
 
 Step 7: Building the Candidate Wordlists
 Action: Generated two wordlists: one for all 4-digit recovery codes and one for spoofed IP addresses.
@@ -138,7 +138,7 @@ for i in {1..255}; do for j in {1..255}; do echo 1.1.$i.$j; done; done | head -9
 Observation: num.txt holds 9,999 codes. ips.txt holds 9,999 unique spoofed IPv4 addresses.
 Outcome: Two wordlists ready for a pitchfork-mode brute force.
 
-https://images/wordlists.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_03_31.png
 
 Step 8: Brute-Forcing the Recovery Code with FFUF
 Action: Ran a pitchfork attack pairing the code wordlist with the IP wordlist.
@@ -151,7 +151,7 @@ ffuf -w num.txt:W1 -w ips.txt:W2 -u http://10.146.188.183:1337/reset_password.ph
 Observation: Around 6,400 requests were sent at ~120-143 req/sec. Responses without 'Invalid' returned status 200 and size 2191 bytes. The valid code matched on several runs (e.g., W1 6443 with W2 1.1.26.68).
 Outcome: Recovery code successfully guessed.
 
-https://images/ffuf_attack.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_30_35.png
 
 Step 9: Entering the Recovery Code and Resetting the Password
 Action: Submitted the discovered code within the timer window.
@@ -161,7 +161,7 @@ Browser: http://10.146.188.183:1337/reset_password.php -> 4-Digit Code field
 Observation: The correct code moved the flow to the 'Reset Your Password' form. A new password was set for tester@hammer.thm.
 Outcome: Full account takeover of the tester account.
 
-https://images/new_password.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_05_31.png
 
 Step 10: Logging in to the Dashboard
 Action: Logged in with the reset credentials.
@@ -171,7 +171,7 @@ Browser login: tester@hammer.thm / <new password>
 Observation: Login succeeded and redirected to dashboard.php. The page displays 'Welcome, Thor! - Flag: THM{AuthBypass3D}' and 'Your role: user'.
 Outcome: Authentication bypassed. Flag 1 captured.
 
-https://images/dashboard_flag1.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_07_27.png
 
 Step 11: Client-Side Authorisation Bypass with persistentSession Cookie
 Action: Reviewed the dashboard source and found a script that checks for a persistentSession cookie.
@@ -185,7 +185,7 @@ setInterval(checkTrailUserCookie, 1000);
 Observation: The check is performed entirely in the browser. Setting persistentSession=yes stops the redirect.
 Outcome: Client-side access control can be defeated by editing a cookie.
 
-https://images/persistent_cookie.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_14_00.png
 
 Step 12: Discovering the JWT and Command Endpoint in Page Source
 Action: Read the inline JavaScript of the dashboard.
@@ -200,7 +200,7 @@ $.ajax({
 Observation: The page embeds a full JWT as a JavaScript variable. The decoded JWT (HS256) contains: iss and aud 'http://hammer.thm', user_id 1, email tester@hammer.thm and role 'user'. The header contains kid '/var/www/mykey.key'.
 Outcome: The token and the command endpoint were identified.
 
-https://images/jwt_decode.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_20_29.png
 
 Step 13: Command Execution through the Dashboard
 Action: Submitted ls through the dashboard form.
@@ -214,7 +214,7 @@ Cookie: PHPSESSID=<session>; token=<JWT>; persistentSession=yes
 Observation: The server returned the directory listing of the web root, including 188ade1.key, composer.json, config.php, dashboard.php, execute_command.php, hmr_css, hmr_images, hmr_js, hmr_logs, index.php, logout.php, reset_password.php and vendor.
 Outcome: Confirmed OS command injection and Remote Code Execution.
 
-https://images/rce_ls.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_07_23.png
 
 Step 14: Identifying the Signing Secret
 Action: Located the file 188ade1.key in the web root.
@@ -224,7 +224,7 @@ json
 Observation: The key file is readable. Its value 56058354efb3daa97ebab00fabd7a7d7 was verified as a valid HS256 secret on jwt.io.
 Outcome: JWT signing secret obtained.
 
-https://images/key_extraction.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_07_48.png
 
 Step 15: Forging a JWT through kid Injection
 Action: Used jwt.io to create a new token, changing the kid header to point to the key file.
@@ -236,7 +236,7 @@ Signature: HMAC-SHA256(header.payload,"56058354efb3daa97ebab00fabd7a7d7")
 Observation: The server accepted the forged token.
 Outcome: Token forgery succeeded.
 
-https://images/jwt_forgery.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_22_12.png
 
 Step 16: Verifying Command Execution as www-data
 Action: Ran the id command through the forged-token request.
@@ -246,7 +246,7 @@ json
 Observation: Response: uid=33(www-data) gid=33(www-data) groups=33(www-data).
 Outcome: Commands run as the web server user www-data.
 
-https://images/rce_id.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_24_21.png
 
 Step 17: Reading the Protected Flag File
 Action: Used the command endpoint to read the flag file.
@@ -256,7 +256,7 @@ json
 Observation: Response: THM{RUNANYCOMMAND1337}.
 Outcome: Flag 2 captured.
 
-https://images/final_flag.png
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-13_01_00_55.png
 
 🔍 5. Findings Summary
 ID	Finding	Severity	Affected Component	Related Step
@@ -370,60 +370,146 @@ The Hammer application failed at each layer of its security design. Authenticati
 Each weakness on its own is a serious issue. Together they gave an unauthenticated attacker full command execution on the server. The recommended fixes are straightforward and well documented in OWASP guidance. Prioritising the removal of the command endpoint, the rotation of secrets, and the rebuild of the reset flow will address the critical and high findings. A retest should be performed once the changes are deployed.
 
 📸 11. Screenshot Evidence Gallery
-<img width="1920" height="1080" alt="Screenshot_2026-10-11_23_08_42" src="https://github.com/user-attachments/assets/f5deaf7d-4298-4a5e-acd6-23ed098f8b33" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-11_23_19_46" src="https://github.com/user-attachments/assets/2ee7e5b5-d817-4970-9c59-05222fca5121" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-11_23_19_57" src="https://github.com/user-attachments/assets/0ee08bdf-b870-4bda-a00b-3944e72efc0b" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-11_23_55_04" src="https://github.com/user-attachments/assets/7ff67486-5c36-4c91-858c-4d189d724fa0" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-11_23_55_34" src="https://github.com/user-attachments/assets/8217dd19-a5ed-4132-9ab9-b5b033778fcc" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_00_42" src="https://github.com/user-attachments/assets/6936c0eb-17de-4a56-a4ec-ba536ccab142" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_19_59" src="https://github.com/user-attachments/assets/20b29a2c-838c-48f1-9d99-e7ed65d53064" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_31_25" src="https://github.com/user-attachments/assets/ce3c3490-6754-4d18-9fee-fdef7e5c386d" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_40_06" src="https://github.com/user-attachments/assets/8424491a-8d8b-40be-a72e-9a9370b30059" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_40_13" src="https://github.com/user-attachments/assets/22bf72f6-b0b1-4d5a-b5b9-a86b923e20f7" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_40_24" src="https://github.com/user-attachments/assets/017b9415-60bc-4fee-ab8e-6a662dfb2f68" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_40_27" src="https://github.com/user-attachments/assets/05fd743f-a226-4fbf-96b5-ca8e4bda09a7" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_40_56" src="https://github.com/user-attachments/assets/038c14fd-f80a-4eff-8d18-fb20d91d3383" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_41_27" src="https://github.com/user-attachments/assets/ef7f0fd2-4e6f-48e5-8aac-5e3fcf307215" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_44_20" src="https://github.com/user-attachments/assets/20c0533e-13cd-43f7-a709-f65718faecad" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_00_58_18" src="https://github.com/user-attachments/assets/f811ad6d-4021-4af9-8066-991ab6858845" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_03_31" src="https://github.com/user-attachments/assets/c19153d4-b22d-4480-951c-ddb260553f0f" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_06_17" src="https://github.com/user-attachments/assets/1eb523c6-b00f-41ae-82c6-b08fd2b99bdf" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_06_58" src="https://github.com/user-attachments/assets/7b6676fe-ed1a-4832-825d-90423fca34fa" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_10_37" src="https://github.com/user-attachments/assets/ab85e82a-7800-4c0a-ae29-87bc5a9930e6" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_30_35" src="https://github.com/user-attachments/assets/12aad14e-5d4d-41bd-91a2-a62a2014e63d" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_30_41" src="https://github.com/user-attachments/assets/e94f5dd0-d9e8-4248-9186-62109b2ccfcd" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_01_36_20" src="https://github.com/user-attachments/assets/39f81cd5-08d1-4af5-89d7-2a14b713a9da" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_05_31" src="https://github.com/user-attachments/assets/41c0a8cf-efc8-4c6b-a13c-b728a6ef5154" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_06_32" src="https://github.com/user-attachments/assets/24b2738c-981e-448c-b298-c31a4760da96" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_07_15" src="https://github.com/user-attachments/assets/19732c79-0cfb-4ed4-a25f-5ab13769e3bf" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_07_27" src="https://github.com/user-attachments/assets/5e0e910e-2e24-4b31-9923-1c61cb8c5574" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_10_50" src="https://github.com/user-attachments/assets/3bc5206a-89bd-4240-9f3a-d60bfacd7a97" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_11_27" src="https://github.com/user-attachments/assets/b2224925-64a7-4ec2-a10e-0d7af231aacb" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_11_55" src="https://github.com/user-attachments/assets/6ca4c59f-6d11-4a55-9fb9-b8011ca8a062" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_02_14_00" src="https://github.com/user-attachments/assets/be93b337-aafb-4b15-8cc0-896c449dab67" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_22_20_11" src="https://github.com/user-attachments/assets/2a5c0b08-ecd8-4c71-9f09-730cc9a9a45c" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_22_28_34" src="https://github.com/user-attachments/assets/ce2ee0b8-3b80-4e6c-a43b-daff878a0826" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_22_34_06" src="https://github.com/user-attachments/assets/db665190-b58d-42cb-84ca-de2147ed45a5" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_22_37_17" src="https://github.com/user-attachments/assets/372d4cb2-1f73-418c-90d8-76a4acd616e6" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_22_37_34" src="https://github.com/user-attachments/assets/263a5434-71cb-40f4-a92b-e486178ce4ee" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_22_37_38" src="https://github.com/user-attachments/assets/05df8684-2d4a-4264-84cd-0be284a6fab9" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_07_23" src="https://github.com/user-attachments/assets/8be666c9-f794-42ff-bc14-6daf845651b7" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_07_45" src="https://github.com/user-attachments/assets/75db8fef-3d82-48d5-b2ef-cf1b900b2b66" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_07_48" src="https://github.com/user-attachments/assets/ac3cf3bf-f53b-4ee2-8b82-347af8ebbc96" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_18_28" src="https://github.com/user-attachments/assets/3979a509-a3f5-43be-abd2-8422c9ed67ad" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_18_33" src="https://github.com/user-attachments/assets/e46bbe68-e952-4d20-a5dd-27907f2889bf" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_19_39" src="https://github.com/user-attachments/assets/a8b49f4a-7ad8-4180-982b-a73fc891d415" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_20_29" src="https://github.com/user-attachments/assets/0acbc5cd-90f7-43ed-90f3-07389c2a324c" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_22_04" src="https://github.com/user-attachments/assets/9f957c4c-234b-497c-af6c-3f9ca5b3346c" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_22_12" src="https://github.com/user-attachments/assets/fb0cedca-7353-4c11-8354-f0bb1664fe0b" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_23_07" src="https://github.com/user-attachments/assets/f9a40a58-51b4-4915-b09b-51ab9459e1c5" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_23_14" src="https://github.com/user-attachments/assets/6ea346c3-26fb-4cf8-981b-9c01b75d88db" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-12_23_24_21" src="https://github.com/user-attachments/assets/47436238-c929-4460-b987-2a2cc3bced16" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-13_00_03_31" src="https://github.com/user-attachments/assets/7f52ecdf-4e8e-4f16-8bf0-bf1b18ecc38b" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-13_00_59_50" src="https://github.com/user-attachments/assets/b64cb8f5-a53a-4c5b-b7fe-0d74664550e1" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-13_01_00_55" src="https://github.com/user-attachments/assets/781fb4cb-4824-48aa-abad-eef615c3f737" />
-<img width="1920" height="1080" alt="Screenshot_2026-10-13_01_01_28" src="https://github.com/user-attachments/assets/17c64ec3-19d5-48e0-8b3c-eeb6ad711ec6" />
+Phase 1: Room Start & Reconnaissance
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_08_42.png
+Figure 1: TryHackMe Hammer room page - Overview
 
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_19_46.png
+Figure 2: Nmap service scan - Port 22 and 1337 open
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_19_57.png
+Figure 3: Login page on port 1337
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_00_42.png
+Figure 4: View-source of the login page showing developer note
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_55_04.png
+Figure 5: Directory brute force with feroxbuster
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_19_59.png
+Figure 6: Public /hmr_logs/ directory listing
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_31_25.png
+Figure 7: Contents of error.logs
+
+Phase 2: Account Access & Password Reset
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-11_23_55_34.png
+Figure 8: Reset Password page
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_40_06.png
+Figure 9: Login attempt with the test account
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_40_13.png
+Figure 10: Login error message
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_40_24.png
+Figure 11: Reset form with tester@hammer.thm
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_40_27.png
+Figure 12: Enter Recovery Code page (180 seconds)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_40_56.png
+Figure 13: Invalid code with timer running
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_41_27.png
+Figure 14: Manual code test 1212
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_44_20.png
+Figure 15: Rate limit exceeded
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_00_58_18.png
+Figure 16: X-Forwarded-For header added in DevTools
+
+Phase 3: Building the Wordlists
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_03_31.png
+Figure 17: Generating num.txt with printf
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_06_17.png
+Figure 18: Typing the nested loop for the IP list
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_06_58.png
+Figure 19: Brace expansion mistake
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_10_37.png
+Figure 20: ips.txt generation
+
+Phase 4: Brute Force of the Recovery Code
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_30_35.png
+Figure 21: Manual code entry 1111
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_30_41.png
+Figure 22: Invalid code with 162 seconds left
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_01_36_20.png
+Figure 23: Request body in DevTools (recovery_code and s)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_05_31.png
+Figure 24: ffuf pitchfork run
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_06_32.png
+Figure 25: ffuf pitchfork run on the second lab instance
+
+Phase 5: Password Reset & Login
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_07_15.png
+Figure 26: Reset Your Password form
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_07_27.png
+Figure 27: Login with the reset password
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_10_50.png
+Figure 28: Dashboard after login (Flag 1)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_11_27.png
+Figure 29: Login POST captured in Firefox Network tab
+
+Phase 6: Client-Side Checks & Source Review
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_11_55.png
+Figure 30: Dashboard command output (ls)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_02_14_00.png
+Figure 31: View-source of index.php (second instance)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_22_20_11.png
+Figure 32: View-source of dashboard.php
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_22_28_34.png
+Figure 33: Editing the persistentSession cookie
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_22_34_06.png
+Figure 34: Python script in nano (form data)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_22_37_17.png
+Figure 35: Python script in nano (dictionary data)
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_22_37_38.png
+Figure 37: Dashboard JavaScript with embedded JWT
+
+Phase 7: Command Execution & Key Recovery
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_07_23.png
+Figure 38: ls from the dashboard form
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_07_45.png
+Figure 39: Opening 188ade1.key in the browser
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_07_48.png
+Figure 40: cat 188ade1.key in the terminal
+
+Phase 8: JWT Analysis & Forgery
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_20_29.png
+Figure 44: jwt.io decoding the original token
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_22_12.png
+Figure 46: jwt.io encoder: forged token with kid injection
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_23_14.png
+Figure 48: jwt.io signature verification
+
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-12_23_24_21.png
+Figure 50: Burp Inspector decoding the forged token
+
+Phase 9: Command Execution as www-data & Flags
+https://raw.githubusercontent.com/%3CYOUR_USERNAME%3E/%3CYOUR_REPO%3E/main/images/Screenshot_2026-10-13_01_00_55.png
+Figure 52: TryHackMe question page with flags
 
 ⚠️ Appendix B: Disclaimer
 This report was produced for a TryHackMe lab exercise for learning purposes. All testing was limited to the lab machine provided by the platform. The techniques described should not be used against systems without explicit written permission.
